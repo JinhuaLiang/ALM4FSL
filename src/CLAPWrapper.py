@@ -1,3 +1,4 @@
+import sys
 import random
 import torchaudio
 from torch._six import string_classes
@@ -6,8 +7,8 @@ import re
 import torch.nn.functional as F
 import numpy as np
 from transformers import AutoTokenizer
-from models.utils import read_config_as_args
-from models.clap import CLAP
+from .models.utils import read_config_as_args
+from .models.clap import CLAP
 import math
 import torchaudio.transforms as T
 import os
@@ -26,7 +27,7 @@ class CLAPWrapper():
         self.default_collate_err_msg_format = (
             "default_collate: batch must contain tensors, numpy arrays, numbers, "
             "dicts or lists; found {}")
-        self.config_as_str = files('configs').joinpath('config.yml').read_text()
+        self.config_as_str = files('src.configs').joinpath('config.yml').read_text()
         self.model_fp = model_fp
         self.use_cuda = use_cuda
         self.clap, self.tokenizer, self.args = self.load_clap()
@@ -149,7 +150,7 @@ class CLAPWrapper():
             audio_tensor = self.load_audio_into_tensor(
                 audio_file, self.args.duration, resample)
             audio_tensor = audio_tensor.reshape(
-                1, -1).cuda if self.use_cuda and torch.cuda.is_available() else audio_tensor.reshape(1, -1)
+                1, -1).cuda() if self.use_cuda and torch.cuda.is_available() else audio_tensor.reshape(1, -1)
             audio_tensors.append(audio_tensor)
         return self.default_collate(audio_tensors)
 
@@ -158,7 +159,7 @@ class CLAPWrapper():
         tokenized_texts = []
         for ttext in text_queries:
             tok = self.tokenizer.encode_plus(
-                text=ttext, add_special_tokens=True, max_length=self.args.text_len, pad_to_max_length=True, return_tensors="pt")
+                text=ttext, add_special_tokens=True, truncation=True, max_length=self.args.text_len, pad_to_max_length=True, return_tensors="pt")
             for key in self.token_keys:
                 tok[key] = tok[key].reshape(-1).cuda() if self.use_cuda and torch.cuda.is_available() else tok[key].reshape(-1)
             tokenized_texts.append(tok)
