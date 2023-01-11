@@ -10,14 +10,6 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 
-fs_label_splits = [
-    [8, 5, 6, 11, 15, 12, 20, 26, 24, 35, 33, 38, 40, 48, 47],
-    [5, 0, 4, 18, 13, 19, 29, 21, 28, 33, 38, 31, 47, 46, 44],
-    [0, 9, 7, 18, 13, 17, 27, 24, 25, 38, 31, 35, 42, 47, 46],
-    [5, 7, 9, 18, 19, 12, 23, 28, 27, 36, 30, 32, 46, 41, 44],
-    [3, 8, 5, 10, 17, 14, 29, 27, 24, 38, 35, 32, 47, 42, 46]
-]
-
 class ESC50(NaiveDataset):
     r"""ESC-50 dataset."""
     def __init__(
@@ -51,7 +43,7 @@ class ESC50(NaiveDataset):
         x, y = item
         x = os.path.join(self.audio_dir, x)
         if self.cfgs['data_type'] == 'audio':
-            x = self._load_audio(x, sr=self.cfgs.sr)
+            x = self._load_audio(os.path.join(self.audio_dir, x), sr=self.cfgs.sr)
         if self.cfgs['target_type'] == 'category':
             y = self.detokeniser[y]
         return x, y

@@ -69,6 +69,11 @@ def confidence_interval(x: np.ndarray, confidence: float = 0.95) -> Tuple[float,
     interval = t * std / np.sqrt(n_sample)
     return mean, interval
 
+def normc2d(x: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
+    r"""Normalise each colunm of `x` with l2-norm."""
+    norm_x = x / (x.pow(2).sum(dim=1, keepdim=True).sqrt() + eps)
+    return norm_x
+
 
 if __name__ == "__main__":
     x = np.asarray(

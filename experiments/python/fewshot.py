@@ -1,4 +1,5 @@
 import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import sys
 import torch
 import argparse
@@ -7,13 +8,11 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Optional
-
 sys.path.insert(0, "../..")
 from src.CLAPWrapper import CLAPWrapper
-from src.data.esc50 import ESC50, fs_label_splits
-from src.data.naive_dataset import SimpleFewShotSampler
+from src.data import prepare_data, SimpleFewShotSampler
 from retrieve import compute_similarity
-from utils import CustomDistance, confidence_interval
+from utils import CustomDistance, confidence_interval, normc2d
 
 torch.manual_seed(42)
 
@@ -88,7 +87,7 @@ class FewShot():
                 print(f"Running accuracy: {_running_acc}")
         acc = torch.tensor(acc, dtype=torch.float).mean()
         return acc
-    
+
     def _adapt_on_batch(self, model: torch.nn.Module, wav_paths: list, targets: list, n_class: int, n_supports: int, n_queries: int, a: float, b: float, train_epochs: int, train_lr: float) -> Tensor:
         r"""Trainable version of few- & zero-shot classification."""
         # Generate a list of selected labels and corresponding captions
@@ -97,6 +96,7 @@ class FewShot():
         # CLIP forward
         with torch.no_grad():
             audio_embeddings = model.get_audio_embeddings(wav_paths, resample=False)
+            audio_embeddings = normc2d(audio_embeddings)  # normalise each column of audio embeddings
             text_embeddings = model.get_text_embeddings(caps)
         support_embeddings, query_embeddings = audio_embeddings[:n_supports * n_class], audio_embeddings[n_supports * n_class:]
         # Predict labels with affinity between support and query embeddings
@@ -105,6 +105,8 @@ class FewShot():
         # Initialise adapter using support embeddings
         adapter = torch.nn.Linear(support_embeddings.size(dim=1), support_embeddings.size(dim=0), bias=False).to(device=audio_embeddings.device)  # dtype=model.clap.dtype, device=model.clap.device
         adapter.weight = torch.nn.Parameter(support_embeddings)
+        # print(f"adapter.weight:{adapter.weight}")
+        # print(f"support_embeddings:{support_embeddings}")
         optimiser = torch.optim.AdamW(adapter.parameters(), lr=train_lr, eps=1e-4)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, train_epochs)
         r"""Fine-tune adapter using training (support) data."""
@@ -113,9 +115,9 @@ class FewShot():
         adapter.train()
         for id in range(train_epochs):
             assert train_emb.size(dim=1) == support_embeddings.size(dim=1)
-            attention = adapter(train_emb)
-            _fewshot_logits = torch.exp(- b * attention) @ support_onehots
+            _attention = adapter(train_emb)  # similarity(train_emb, support_embeddings)
 
+            _fewshot_logits = torch.exp(- b + b * _attention) @ support_onehots
             _zeroshot_logits = model.compute_similarity(train_emb, text_embeddings)
             _overall_logits = (a * _fewshot_logits + _zeroshot_logits)
 
@@ -128,7 +130,7 @@ class FewShot():
         r"""Evaluate adapter using eval (query) data."""
         adapter.eval()
         attention = adapter(query_embeddings)
-        fewshot_logits = torch.exp(- b * attention) @ support_onehots
+        fewshot_logits = torch.exp(- b + b * attention) @ support_onehots
 
         zeroshot_logits = model.compute_similarity(query_embeddings, text_embeddings)
         preds = (a * fewshot_logits + zeroshot_logits)
@@ -191,6 +193,7 @@ class FewShot():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", type=str, default="esc50")
     parser.add_argument("--n_class", type=int, default=15)
     parser.add_argument("--n_supports", type=int, default=1)
     parser.add_argument("--n_queries", type=int, default=30)
@@ -199,10 +202,28 @@ if __name__ == '__main__':
     parser.add_argument("--train_lr", type=float, default=0.0001)
     args = parser.parse_args()
     # I/O
-    audio_dir = '/data/EECS-MachineListeningLab/datasets/ESC-50/audio'
-    csv_path = '/data/EECS-MachineListeningLab/datasets/ESC-50/meta/esc50.csv'
-    database = ESC50(audio_dir=audio_dir, csv_path=csv_path, data_type='path', target_type='category')
     weights_pth = '/data/EECS-MachineListeningLab/jinhua/AudioSSL/CLAP_weights_2022.pth'
+    audio_dirs = {
+        'esc50': '/data/EECS-MachineListeningLab/datasets/ESC-50/audio',
+        'fsdkaggle18k': [
+            '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.audio_train', 
+            '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.audio_test'
+            ]
+    }
+    csv_paths = {
+        'esc50': '/data/EECS-MachineListeningLab/datasets/ESC-50/meta/esc50.csv',
+        'fsdkaggle18k': [
+            '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.meta/train_post_competition.csv', 
+            '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.meta/test_post_competition_scoring_clips.csv'
+            ]
+    }
+    DataBase, fs_label_splits = prepare_data(data_source=args.dataset)
+    database = DataBase(
+        audio_dir=audio_dirs[args.dataset], 
+        csv_path=csv_paths[args.dataset], 
+        data_type='path', 
+        target_type='category'
+        )
     # Exp setting
     fewshot_cfgs = {
         'n_class': args.n_class, 
@@ -214,7 +235,7 @@ if __name__ == '__main__':
         'train_epochs': args.train_epochs,
         'train_lr': args.train_lr
     }
-    print(f"The seetings for the experiment: {fewshot_cfgs}, {finetune_cfgs}")
+    print(f"The seetings for the experiment of {args.dataset}: {fewshot_cfgs}, {finetune_cfgs}")
     history = list()
     for idx, val_labelset in enumerate(fs_label_splits):
         print(f"Cross-validation: {idx}/{len(fs_label_splits)}")
