@@ -2,8 +2,45 @@ import torch
 import numpy as np
 import scipy.stats
 from torch import Tensor
-from typing import Tuple
+from typing import Tuple, Callable
 
+
+def tgt_tokenise_fn(target_type: str = 'onehot') -> Callable:
+    if target_type == 'onehot':
+        return _one_hot
+    elif target_type == 'multihot':
+        return _multi_hot
+    else:
+        raise ValueError(f"Cannot recognise {target_type}")
+
+def _one_hot(target: list, labelset: list) -> Tensor:
+    r"""A simple way to generate one-hot label for few-shot algorithms.
+    Returns: A tensor with shape = (len(target), len(labelset)).
+    e.g., a = _one_hot(target=['a', 'b'], labelset=['a', 'b', 'c'])  # [[1, 0, 0], [0, 1, 0]]
+    """
+    # Create dict: target -> class_id
+    _tokeniser = dict()
+    for idx, l in enumerate(labelset):
+        _tokeniser[l] = idx
+    one_hot = torch.zeros(len(target), len(labelset))
+    for idx, tgt in enumerate(target):
+        one_hot[idx][_tokeniser[tgt]] = 1
+    return one_hot
+
+def _multi_hot(target: list, labelset: list, sep: str = ', ') -> Tensor:
+    r"""A simple way to generate one-hot label for few-shot algorithms.
+    Returns: A tensor with shape = (len(target), len(labelset)).
+    e.g., a = _multi_hot(target=['a', 'a,b'], labelset=['a', 'b', 'c'])  # [[1, 0, 0], [1, 1, 0]]
+    """
+    # Create dict: target -> class_id
+    _tokeniser = dict()
+    for idx, l in enumerate(labelset):
+        _tokeniser[l] = idx
+    multi_hot = torch.zeros(len(target), len(labelset))
+    for idx, tgt in enumerate(target):
+        for t in tgt.split(sep):
+            multi_hot[idx][_tokeniser[t]] = 1
+    return multi_hot
 
 class CustomDistance():
     r""" A collection of distance functions."""

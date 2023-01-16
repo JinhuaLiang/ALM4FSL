@@ -1,0 +1,6 @@
+- database=fsd_fs
+- fewshot.n_class=10
+- fewshot.n_supports=10
+- fewshot.n_queries=10
+- fewshot.fine_tune=False
+- fewshot.train_epochs=0

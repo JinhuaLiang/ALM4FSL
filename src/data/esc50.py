@@ -27,7 +27,8 @@ class ESC50(NaiveDataset):
             fold: list = [1, 2, 3, 4, 5],  # do NOT change in the few-shot setting
             data_type: str = 'path',
             sample_rate: int = 44100,
-            target_type: str = 'category'
+            target_type: str = 'category',
+            **kargs
     ) -> None:
         super().__init__()
         self.audio_dir = audio_dir

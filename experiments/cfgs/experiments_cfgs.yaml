@@ -1,0 +1,50 @@
+# EXPERIMENT SETTING INTERFACE
+database: esc50
+experiment: ml_fewshot
+model_weights_path: /data/EECS-MachineListeningLab/jinhua/AudioSSL/CLAP_weights_2022.pth
+
+# [Optaional] DETAILED EXPERIMENT SETTINGS
+fewshot:
+  # ALGORITHM
+  adapter: match
+
+  # FEWSHOT SETTING
+  n_class: 15
+  n_supports: 1
+  n_queries: 30
+
+  # TRAINING SETTING
+  fine_tune: false
+  train_epochs: 15
+  learning_rate: 0.001
+
+  # `match` SETTING, WORKS ONLY `adapter = match`
+  match:
+    a: 1.0
+    b: 5.5
+
+# DATABASE SETTINGS
+esc50:
+  audio_dir: /data/EECS-MachineListeningLab/datasets/ESC-50/audio
+  csv_path: /data/EECS-MachineListeningLab/datasets/ESC-50/meta/esc50.csv
+
+fsdkaggle18k:
+  audio_dir: [
+    '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.audio_train',
+    '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.audio_test'
+  ]
+  csv_path: [
+    '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.meta/train_post_competition.csv', 
+    '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.meta/test_post_competition_scoring_clips.csv'
+  ]
+
+fsd_fs:
+  clip_dir: /data/EECS-MachineListeningLab/datasets/FSD_FS/clips/eval
+  audio_dir: /data/EECS-MachineListeningLab/datasets/FSD_FS
+  csv_path: /data/EECS-MachineListeningLab/datasets/FSD_FS/meta
+  mode: eval # ['base', 'val', 'eval']
+
+
+# hydra:
+#   run:
+#     dir: ${OUTPUTS.DIR}

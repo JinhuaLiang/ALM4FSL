@@ -10,7 +10,7 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 
-fsdkaggle18k_val_labelsets = [
+fsdkaggle18k_labelsets = [
     ['Glockenspiel', 'Tambourine', 'Applause', 'Cowbell', 'Hi-hat', 'Squeak', 'Meow', 'Finger_snapping', 'Scissors', 'Telephone'],
     ['Hi-hat', 'Laughter', 'Saxophone', 'Snare_drum', 'Gong', 'Burping_or_eructation', 'Tearing', 'Electric_piano', 'Violin_or_fiddle', 'Keys_jangling'],
     ['Tambourine', 'Double_bass', 'Cough', 'Drawer_open_or_close', 'Keys_jangling', 'Harmonica', 'Bus', 'Bark', 'Squeak', 'Violin_or_fiddle'],
@@ -26,7 +26,8 @@ class FSDKaggle18K(NaiveDataset):
             csv_path: str, *,
             data_type: str = 'path',
             sample_rate: int = 44100,
-            target_type: str = 'category'
+            target_type: str = 'category',
+            **kargs
     ) -> None:
         super().__init__()
         audio_csv_dirs = list(zip(audio_dir, csv_path))

@@ -31,7 +31,8 @@ class SimpleFewShotSampler():
             n_class: int = 15,
             n_supports: int = 5,
             n_queries: int = 5,
-            n_task: int = 100
+            n_task: int = 100,
+            **kargs
     ) -> None:
         self.dataset = dataset
         self.labelset = labelset
