@@ -3,7 +3,7 @@ from torch.nn import Module
 from .naive_dataset import SimpleFewShotSampler
 from .esc50 import ESC50, fs_label_splits
 from .fsdkaggle18k import FSDKaggle18K, fsdkaggle18k_labelsets
-from .fsd_fs import FSD_FS, MLFewShotSampler, fsd50k_select_ids
+from .fsd_fs import FSD_FS, MLFewShotSampler, fsd50k_splits
 
 
 def prepare_data(data_source: str) -> Tuple[Module, list]:
@@ -13,6 +13,6 @@ def prepare_data(data_source: str) -> Tuple[Module, list]:
     elif data_source == "fsdkaggle18k":
         return FSDKaggle18K, SimpleFewShotSampler, fsdkaggle18k_labelsets
     elif data_source == 'fsd_fs':
-        return FSD_FS, MLFewShotSampler, fsd50k_select_ids
+        return FSD_FS, MLFewShotSampler, fsd50k_splits
     else:
         raise ValueError(f"Cannot find a datasource name {data_source}.")

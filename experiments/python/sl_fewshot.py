@@ -57,6 +57,8 @@ class SingleLabelFewShot():
         cuda: bool,
         tgt_tokeniser: Callable,
         fine_tune: bool = False,
+        adapter_type: str = 'match', # xattention
+        xatt_disturb: bool = True,
         train_epochs: int = 20,
         train_lr: float = 1e-4,
     ) -> None:
@@ -80,6 +82,8 @@ class SingleLabelFewShot():
                 'train_epochs': train_epochs,
                 'train_lr': train_lr,
             }
+            self.adapter_type = adapter_type
+            self.xatt_disturb = xatt_disturb
         
     def forward(self, verbose: bool = False):
         clap_model = CLAPWrapper(self.weights_pth, use_cuda=self.cuda)
@@ -111,14 +115,19 @@ class SingleLabelFewShot():
         _support_targets, query_targets = targets[:n_supports * n_class], targets[n_supports * n_class:]
         support_onehots = self.tgt_tokeniser(target=_support_targets, labelset=labelset).to(device=query_embeddings.device)
         # Initialise adapter using support embeddings
-        adapter = torch.nn.Linear(support_embeddings.size(dim=1), support_embeddings.size(dim=0), bias=False).to(device=audio_embeddings.device)  # dtype=model.clap.dtype, device=model.clap.device
-        adapter.weight = torch.nn.Parameter(support_embeddings)
-        # Another adapter to convert audio embedding
-        # embed_dim = support_embeddings.size(dim=1)
-        # adapter = torch.nn.Linear(embed_dim, embed_dim, bias=False).to(device=audio_embeddings.device)
-        # adapter.weight = torch.nn.Parameter(torch.eye(embed_dim, device=audio_embeddings.device))
+        if self.adapter_type == 'match':
+            adapter = torch.nn.Linear(support_embeddings.size(dim=1), support_embeddings.size(dim=0), bias=False).to(device=audio_embeddings.device)  # dtype=model.clap.dtype, device=model.clap.device
+            adapter.weight = torch.nn.Parameter(support_embeddings)
+        elif self.adapter_type == 'xattention':
+            embed_dim = support_embeddings.size(dim=1)
+            adapter = torch.nn.Linear(embed_dim, embed_dim, bias=False).to(device=audio_embeddings.device)
+            if self.xatt_disturb:
+                init_w = torch.eye(embed_dim) + 1e-4 * (torch.rand((embed_dim, embed_dim)) - 0.5)
+            else:
+                init_w = torch.eye(embed_dim)
+            adapter.weight = torch.nn.Parameter(init_w.to(audio_embeddings.device))
 
-        optimiser = torch.optim.AdamW(adapter.parameters(), lr=0.0, eps=1e-4) # train_lr
+        optimiser = torch.optim.AdamW(adapter.parameters(), lr=train_lr, eps=1e-4)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, train_epochs)
         r"""Fine-tune adapter using training (support) data."""
         shuffle_idx = torch.randperm(support_embeddings.size(dim=0))
@@ -126,10 +135,11 @@ class SingleLabelFewShot():
         adapter.train()
         for id in range(train_epochs):
             assert train_emb.size(dim=1) == support_embeddings.size(dim=1)
-            _attention = adapter(train_emb)  # similarity(train_emb, support_embeddings)
-            # Another adapter usage
-            # _new_train_emb, _new_support_emb = adapter(train_emb), adapter(support_embeddings)
-            # _attention = _new_train_emb @ _new_support_emb.T
+            if self.adapter_type == 'match':
+                _attention = adapter(train_emb)  # similarity(train_emb, support_embeddings)
+            elif self.adapter_type == 'xattention':
+                _new_train_emb, _new_support_emb = adapter(train_emb), adapter(support_embeddings)
+                _attention = _new_train_emb @ _new_support_emb.T
 
             _fewshot_logits = torch.exp(- b + b * _attention) @ support_onehots
             _zeroshot_logits = model.compute_similarity(train_emb, text_embeddings)
@@ -143,9 +153,11 @@ class SingleLabelFewShot():
             scheduler.step()
         r"""Evaluate adapter using eval (query) data."""
         adapter.eval()
-        # attention = adapter(query_embeddings)
-        new_query_emb, new_support_emb = adapter(query_embeddings), adapter(support_embeddings)
-        attention = new_query_emb @ new_support_emb.T
+        if self.adapter_type == 'match':
+            attention = adapter(query_embeddings)
+        elif self.adapter_type == 'xattention':
+            new_query_emb, new_support_emb = adapter(query_embeddings), adapter(support_embeddings)
+            attention = new_query_emb @ new_support_emb.T
         fewshot_logits = torch.exp(- b + b * attention) @ support_onehots
 
         zeroshot_logits = model.compute_similarity(query_embeddings, text_embeddings)
@@ -234,20 +246,22 @@ def main(cfgs: OmegaConf) -> None:
             n_class=cfgs['fewshot']['n_class'],
             n_supports=cfgs['fewshot']['n_supports'],
             n_queries=cfgs['fewshot']['n_queries'],
-            a=cfgs['fewshot']['match']['a'],
-            b=cfgs['fewshot']['match']['b'],
+            a=cfgs['fewshot']['a'],
+            b=cfgs['fewshot']['b'],
             distance='cosine', 
             cuda=True,
             tgt_tokeniser=tgt_tokeniser,
             fine_tune=cfgs['fewshot']['fine_tune'],
+            adapter_type=cfgs['fewshot']['adapter'],
+            xatt_disturb=cfgs['fewshot']['xattention']['disturb'],
             train_epochs=cfgs['fewshot']['train_epochs'],
             train_lr=cfgs['fewshot']['learning_rate'],
             )
         _acc = fewshot.forward()
         history.append(_acc)
         print(f"Final accuracy={_acc}")
-        mean, interval = confidence_interval(x=np.asarray(history), confidence=0.95)
-        print(f"The {len(fs_label_splits)}-fold cross-validation: mean={mean}, var={interval}.")
+    mean, interval = confidence_interval(x=np.asarray(history), confidence=0.95)
+    print(f"The {len(fs_label_splits)}-fold cross-validation: mean={mean}, var={interval}.")
 
 
 if __name__ == '__main__':

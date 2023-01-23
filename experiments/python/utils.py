@@ -38,7 +38,10 @@ def _multi_hot(target: list, labelset: list, sep: str = ', ') -> Tensor:
         _tokeniser[l] = idx
     multi_hot = torch.zeros(len(target), len(labelset))
     for idx, tgt in enumerate(target):
-        for t in tgt.split(sep):
+        if isinstance(tgt, str):
+            tgt = tgt.split(sep)
+            
+        for t in tgt:
             multi_hot[idx][_tokeniser[t]] = 1
     return multi_hot
 

@@ -17,6 +17,7 @@ from src.data import prepare_data, SimpleFewShotSampler
 from retrieve import compute_similarity
 from utils import CustomDistance, confidence_interval, normc2d, tgt_tokenise_fn
 
+torch.backends.cudnn.benchmark = True
 torch.manual_seed(42)
 
 class MultiLabelFewShot():
@@ -34,6 +35,8 @@ class MultiLabelFewShot():
         cuda: bool,
         tgt_tokeniser: Callable,
         fine_tune: bool = False,
+        adapter_type: str = 'match', # xattention
+        xatt_disturb: bool = True,
         train_epochs: int = 20,
         train_lr: float = 1e-4,
     ) -> None:
@@ -58,15 +61,17 @@ class MultiLabelFewShot():
                 'train_epochs': train_epochs,
                 'train_lr': train_lr,
             }
+            self.adapter_type = adapter_type
+            self.xatt_disturb = xatt_disturb
         
     def forward(self, verbose: bool = False):
         clap_model = CLAPWrapper(self.weights_pth, use_cuda=self.cuda)
-        acc = list()
+        map, roc = list(), list()
         # for xs, ys in tqdm(self.dataloader):
         for xs, ys in self.dataloader:
             _tmp_ys = list()
             for y in ys:
-                _tmp_ys.append(y.split(', '))
+                _tmp_ys.append(y.split(self.tgt_fmt))
             ys = _tmp_ys
             if self.fine_tune: 
                 _map, _roc = self._adapt_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
@@ -76,14 +81,17 @@ class MultiLabelFewShot():
             roc.append(_roc)
             if verbose:
                 print(f"Running map: {_map}, roc: {_roc}")
-        map = torch.tensor(map, dtype=torch.float).mean()
-        roc = torch.tensor(roc, dtype=torch.float).mean()
+        map = np.mean(map)
+        roc = np.mean(roc)
         return map, roc
 
     def _adapt_on_batch(self, model: torch.nn.Module, wav_paths: list, targets: list, n_class: int, n_supports: int, n_queries: int, a: float, b: float, train_epochs: int, train_lr: float) -> Tensor:
         r"""Trainable version of few- & zero-shot classification."""
         # Generate a list of selected labels and corresponding captions
-        labelset = list(set(targets))
+        labelset = list()
+        for t in targets:
+            labelset.extend(t)
+        labelset = list(set(labelset))
         caps = [self.prompt + l for l in labelset]
         # CLAP forward
         with torch.no_grad():
@@ -92,34 +100,40 @@ class MultiLabelFewShot():
             text_embeddings = model.get_text_embeddings(caps)
         support_embeddings, query_embeddings = audio_embeddings[:n_supports * n_class], audio_embeddings[n_supports * n_class:]
         # Predict labels with affinity between support and query embeddings
-        _support_targets, query_targets = targets[:n_supports * n_class], targets[n_supports * n_class:]
-        support_onehots = self.tgt_tokeniser(target=_support_targets, labelset=labelset).to(device=query_embeddings.device)
+        targets = self.tgt_tokeniser(target=targets, labelset=labelset).to(device=query_embeddings.device)
+        support_targets, query_targets = targets[:n_supports * n_class], targets[n_supports * n_class:].detach().cpu().numpy()
         # Initialise adapter using support embeddings
-        adapter = torch.nn.Linear(support_embeddings.size(dim=1), support_embeddings.size(dim=0), bias=False).to(device=audio_embeddings.device)  # dtype=model.clap.dtype, device=model.clap.device
-        adapter.weight = torch.nn.Parameter(support_embeddings)
-        # Another adapter to convert audio embedding
-        # embed_dim = support_embeddings.size(dim=1)
-        # adapter = torch.nn.Linear(embed_dim, embed_dim, bias=False).to(device=audio_embeddings.device)
-        # adapter.weight = torch.nn.Parameter(torch.eye(embed_dim, device=audio_embeddings.device))
+        if self.adapter_type == 'match':
+            adapter = torch.nn.Linear(support_embeddings.size(dim=1), support_embeddings.size(dim=0), bias=False).to(device=audio_embeddings.device)  # dtype=model.clap.dtype, device=model.clap.device
+            adapter.weight = torch.nn.Parameter(support_embeddings)
+        elif self.adapter_type == 'xattention':
+            embed_dim = support_embeddings.size(dim=1)
+            adapter = torch.nn.Linear(embed_dim, embed_dim, bias=False).to(device=audio_embeddings.device)
+            if self.xatt_disturb:
+                init_w = torch.eye(embed_dim) + 1e-4 * (torch.rand((embed_dim, embed_dim)) - 0.5)
+            else:
+                init_w = torch.eye(embed_dim)
+            adapter.weight = torch.nn.Parameter(init_w.to(audio_embeddings.device))
 
-        optimiser = torch.optim.AdamW(adapter.parameters(), lr=0.0, eps=1e-4) # train_lr
+        optimiser = torch.optim.AdamW(adapter.parameters(), lr=train_lr, eps=1e-4)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, train_epochs)
         r"""Fine-tune adapter using training (support) data."""
         shuffle_idx = torch.randperm(support_embeddings.size(dim=0))
-        train_emb, train_onehots = support_embeddings[shuffle_idx], support_onehots[shuffle_idx]
+        train_emb, train_tgt = support_embeddings[shuffle_idx], support_targets[shuffle_idx]
         adapter.train()
         for id in range(train_epochs):
             assert train_emb.size(dim=1) == support_embeddings.size(dim=1)
-            _attention = adapter(train_emb)  # similarity(train_emb, support_embeddings)
-            # Another adapter usage
-            # _new_train_emb, _new_support_emb = adapter(train_emb), adapter(support_embeddings)
-            # _attention = _new_train_emb @ _new_support_emb.T
+            if self.adapter_type == 'match':
+                _attention = adapter(train_emb)  # similarity(train_emb, support_embeddings)
+            elif self.adapter_type == 'xattention':
+                _new_train_emb, _new_support_emb = adapter(train_emb), adapter(support_embeddings)
+                _attention = _new_train_emb @ _new_support_emb.T
 
-            _fewshot_logits = torch.exp(- b + b * _attention) @ support_onehots
+            _fewshot_logits = torch.exp(- b + b * _attention) @ support_targets
             _zeroshot_logits = model.compute_similarity(train_emb, text_embeddings)
             _overall_logits = (a * _fewshot_logits + _zeroshot_logits)
 
-            loss = torch.nn.functional.cross_entropy(_overall_logits, train_onehots.argmax(dim=-1))
+            loss = torch.nn.functional.cross_entropy(_overall_logits, train_tgt.argmax(dim=-1))
             # Update params
             optimiser.zero_grad()
             loss.backward()
@@ -127,21 +141,19 @@ class MultiLabelFewShot():
             scheduler.step()
         r"""Evaluate adapter using eval (query) data."""
         adapter.eval()
-        # attention = adapter(query_embeddings)
-        new_query_emb, new_support_emb = adapter(query_embeddings), adapter(support_embeddings)
-        attention = new_query_emb @ new_support_emb.T
-        fewshot_logits = torch.exp(- b + b * attention) @ support_onehots
+        if self.adapter_type == 'match':
+            attention = adapter(query_embeddings)
+        elif self.adapter_type == 'xattention':
+            new_query_emb, new_support_emb = adapter(query_embeddings), adapter(support_embeddings)
+            attention = new_query_emb @ new_support_emb.T
+        fewshot_logits = torch.exp(- b + b * attention) @ support_targets
 
         zeroshot_logits = model.compute_similarity(query_embeddings, text_embeddings)
-        preds = (a * fewshot_logits + zeroshot_logits).sigmoid()
+        preds = (a * fewshot_logits + zeroshot_logits).sigmoid().detach().cpu().numpy()
         # Compare predictions with query targets
-        preds = preds.argmax(dim=1).tolist()
-        correct_cnt = 0
-        for idx, p in enumerate(preds):
-            if labelset[p] == query_targets[idx]:
-                correct_cnt += 1
-        _running_acc = correct_cnt / len(preds)
-        return _running_acc
+        map = metrics.average_precision_score(query_targets, preds, average='macro')
+        roc = metrics.roc_auc_score(query_targets, preds, average='macro')
+        return map, roc
 
     def _test_on_batch(self, model: torch.nn.Module, wav_paths: list, targets: list, n_class: int, n_supports: int, n_queries: int, a: float, b: float) -> Tensor:
         r"""Predict query logits using support embeddings and targets."""
@@ -156,15 +168,15 @@ class MultiLabelFewShot():
         support_embeddings, query_embeddings = audio_embeddings[:n_supports * n_class], audio_embeddings[n_supports * n_class:]
         # Predict labels with affinity between support and query embeddings
         targets = self.tgt_tokeniser(target=targets, labelset=labelset).to(device=query_embeddings.device)
-        support_targets, query_targets = targets[:n_supports * n_class], targets[n_supports * n_class:]
-        fewshot_logits = self._affinity_predict(q_x=query_embeddings, s_x=support_embeddings, s_y=support_onehots, b=self.b)
+        support_targets, query_targets = targets[:n_supports * n_class], targets[n_supports * n_class:].detach().cpu().numpy()
+        fewshot_logits = self._affinity_predict(q_x=query_embeddings, s_x=support_embeddings, s_y=support_targets, b=self.b)
         # Predict labels with similarity between audio and text embeddings
         text_embeddings = model.get_text_embeddings(caps)
         zeroshot_logits = model.compute_similarity(query_embeddings, text_embeddings)  # size = (n_wav, n_class)
-        preds = (a * fewshot_logits + zeroshot_logits).sigmoid()
+        preds = (a * fewshot_logits + zeroshot_logits).sigmoid().detach().cpu().numpy()
         # Compare predictions with query targets
         map = metrics.average_precision_score(query_targets, preds, average='macro')
-        roc = metrics.roc_auc_score(labels, predictions, average='macro')
+        roc = metrics.roc_auc_score(query_targets, preds, average='macro')
         return map, roc
     
     def _affinity_predict(self, q_x: Tensor, s_x: Tensor, s_y: Tensor, b: float) -> Tensor:
@@ -188,17 +200,19 @@ def main(cfgs: OmegaConf) -> None:
     csv_path = cfgs[db_name]['csv_path']
     
     DataSet, Sampler, fs_label_splits = prepare_data(data_source=db_name)
-    val_labelset = fs_label_splits[cfgs[db_name]['mode']]
+    mode = cfgs[db_name]['mode']
+    # mode = f"dev_{mode}" if mode != 'eval' else mode # todo: del dev
+    val_labelset = fs_label_splits[mode]
     database = DataSet(
         audio_dir=audio_dir, 
         csv_path=csv_path, 
         data_type='path', 
         target_type='category',
         clip_dir=cfgs['fsd_fs']['clip_dir'],
-        mode=cfgs['fsd_fs']['mode']
+        mode=mode
         )
     tgt_tokeniser = tgt_tokenise_fn('multihot')
-    print(f"Experiment on {cfgs[db_name]['mode']} split.}")
+    print(f"Experiment on {mode} split.")
     # train_labelset = [x for x in range(len(database.labelset)) if x not in val_labelset]
     sampler = Sampler(
         dataset=database, 
@@ -218,17 +232,19 @@ def main(cfgs: OmegaConf) -> None:
         n_class=cfgs['fewshot']['n_class'],
         n_supports=cfgs['fewshot']['n_supports'],
         n_queries=cfgs['fewshot']['n_queries'],
-        a=cfgs['fewshot']['match']['a'],
-        b=cfgs['fewshot']['match']['b'],
+        a=cfgs['fewshot']['a'],
+        b=cfgs['fewshot']['b'],
         distance='cosine', 
         cuda=True,
         tgt_tokeniser=tgt_tokeniser,
         fine_tune=cfgs['fewshot']['fine_tune'],
+        adapter_type=cfgs['fewshot']['adapter'],
+        xatt_disturb=cfgs['fewshot']['xattention']['disturb'],
         train_epochs=cfgs['fewshot']['train_epochs'],
         train_lr=cfgs['fewshot']['learning_rate'],
         )
     map, roc = fewshot.forward()
-    print(f"The results on {cfgs[db_name]['mode']}: map={map}, roc={roc}")
+    print(f"The results on {mode}: map={map}, roc={roc}")
 
 
 if __name__ == '__main__':

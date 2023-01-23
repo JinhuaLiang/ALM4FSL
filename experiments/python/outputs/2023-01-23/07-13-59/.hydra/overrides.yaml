@@ -1,0 +1,8 @@
+- database=esc50
+- fewshot.n_class=15
+- fewshot.n_supports=15
+- fewshot.n_queries=30
+- fewshot.fine_tune=True
+- fewshot.adapter=xattention
+- fewshot.xattention.disturb=False
+- fewshot.train_epochs=25

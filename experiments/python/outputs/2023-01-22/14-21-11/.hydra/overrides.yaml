@@ -1,0 +1,8 @@
+- database=fsdkaggle18k
+- fewshot.n_class=10
+- fewshot.n_supports=20
+- fewshot.n_queries=50
+- fewshot.fine_tune=True
+- fewshot.adapter=xattention
+- fewshot.xattention.disturb=True
+- fewshot.train_epochs=10

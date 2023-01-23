@@ -1,0 +1,6 @@
+- database=fsdkaggle18k
+- fewshot.n_class=10
+- fewshot.n_supports=5
+- fewshot.n_queries=50
+- fewshot.fine_tune=True
+- fewshot.train_epochs=15

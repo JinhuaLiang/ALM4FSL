@@ -1,7 +1,7 @@
 # EXPERIMENT SETTING INTERFACE
 database: esc50
 experiment: ml_fewshot
-model_weights_path: /data/EECS-MachineListeningLab/jinhua/AudioSSL/CLAP_weights_2022.pth
+model_weights_path: /data/EECS-MachineListeningLab/jinhua/ALM4FSL/ckpts/CLAP_weights_2022.pth
 
 # [Optaional] DETAILED EXPERIMENT SETTINGS
 fewshot:
@@ -16,12 +16,13 @@ fewshot:
   # TRAINING SETTING
   fine_tune: false
   train_epochs: 15
-  learning_rate: 0.001
+  learning_rate: 0.0001
 
-  # `match` SETTING, WORKS ONLY `adapter = match`
-  match:
-    a: 1.0
-    b: 5.5
+  a: 1.0  # over_all = a * fewshot_logits + zeroshot_logits
+  b: 5.5  # fewshot_logits = torch.exp(- b + b * attention) @ support_onehots
+
+  xattention:
+    disturb: true
 
 # DATABASE SETTINGS
 esc50:
@@ -42,7 +43,7 @@ fsd_fs:
   clip_dir: /data/EECS-MachineListeningLab/datasets/FSD_FS/clips/eval
   audio_dir: /data/EECS-MachineListeningLab/datasets/FSD_FS
   csv_path: /data/EECS-MachineListeningLab/datasets/FSD_FS/meta
-  mode: eval # ['base', 'val', 'eval']
+  mode: eval # ['dev_base', 'dev_val', 'eval']
 
 
 # hydra:

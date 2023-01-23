@@ -12,33 +12,43 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 
-fsd50k_select_ids = {
-    'base': [
-            '/m/07rgt08', '/m/0ytgt', '/m/02zsn', '/m/07sr1lc', '/m/07s0dtb', '/m/07r660_', '/m/01h8n0', '/m/05zppz',
-            '/m/01j3sz', '/m/03qc9zr', '/m/07pbtc8', '/m/025_jnm', '/m/053hz1', '/m/01b_21', '/m/03cczk', '/m/03qtwd',
-            '/m/07rkbfh', '/m/0l15bq', '/m/02rtxlg', '/m/01hsr_', '/m/015lz1', '/m/03q5_w', '/m/07plz5l', '/m/028ght',
-            '/m/02yds9', '/m/01dwxx', '/m/07qrkrw', '/m/020bb7', '/m/05tny_', '/m/04s8yn', '/m/025rv6n', '/m/09ld4',
-            '/m/01yrx', '/m/0bt9lr', '/m/05r5c', '/m/01qbl', '/m/0j45pbj', '/m/026t6', '/m/07gql', '/m/0342h',
-            '/m/07brj', '/m/0mbct', '/m/0l14_3', '/m/0l14md', '/m/05148p4', '/m/01hgjl', '/m/03qjg', '/m/0mkg',
-            '/m/03m5k', '/m/07r10fb', '/m/06mb1', '/m/05kq4', '/m/0j6m2', '/m/0btp2', '/m/04_sv', '/m/07r04',
-            '/m/01m2v', '/m/0c2wf', '/m/0k4j', '/m/01bjv', '/m/06_fw', '/m/07jdr', '/m/01hnzm', '/m/0199g',
-            '/m/01d380', '/m/02y_763', '/m/07rjzl8', '/m/0fqfqc', '/m/07prgkl', '/m/0dxrf', '/m/0642b4', '/m/01x3z',
-            '/m/07p7b8y', '/m/07rn7sz', '/m/081rb', '/m/01s0vc', '/m/0dv3j', '/m/01b82r', '/m/02bm9n', '/m/0_ksk',
-            '/m/03dnzn', '/m/03l9g', '/m/019jd', '/m/07q7njn', '/m/03kmc9', '/m/0fx9l', '/m/07pb8fc', '/m/02dgv',
-            '/m/07q2z82', '/m/05mxj0q', '/m/0g6b5', '/m/0dv5r', '/m/06d_3', '/m/032s66', '/m/01lsmm', '/m/07q8k13',
-            '/t/dd00112', '/m/07qcx4z'
-        ],
-        'val': [
-            '/t/dd00003', '/m/0brhx', '/m/09x0r', '/m/02_nn', '/m/0lyf6', '/m/0463cq4', '/m/09b5t', '/m/0ghcn6',
-            '/m/03vt0', '/m/02hnl', '/m/05r5wn', '/m/085jw', '/m/0fx80y', '/m/034srq', '/m/07swgks',
-            '/m/07pqc89', '/m/0195fx', '/m/0cmf2', '/m/07cx4', '/t/dd00130', '/m/07rrlb6', '/m/01m4t',
-            '/m/03v3yw', '/m/0130jx', '/m/02x984l', '/m/023pjk', '/m/02jz0l', '/m/0k5j', '/m/04brg2',
-            '/m/07plct2'
-        ],
-        'eval': [
-            '/t/dd00004', '/m/07p6fty', '/m/06h7j', '/m/09xqv', '/m/015p6', '/m/013y1f', '/m/01kcd', '/m/0ngt1',
-            '/m/07qjznl', '/m/0316dw', '/m/01jt3m', '/m/0242l', '/m/07qqyl4', '/m/012f08', '/m/07r5v4s'
-        ]
+fsd50k_splits = {
+    'dev_base': [
+        'Chuckle_and_chortle', 'Child_speech_and_kid_speaking', 
+        'Female_speech_and_woman_speaking', 'Yell', 'Gasp', 'Giggle', 'Conversation', 
+        'Male_speech_and_man_speaking', 'Laughter', 'Shout', 'Walk_and_footsteps', 
+        'Finger_snapping', 'Cheering', 'Cough', 'Chewing_and_mastication', 'Breathing', 
+        'Chatter', 'Clapping', 'Whispering', 'Sneeze', 'Singing', 'Burping_and_eructation', 
+        'Sigh', 'Speech', 'Purr', 'Gull_and_seagull', 'Meow', 
+        'Bird_vocalization_and_bird_call_and_bird_song', 'Bark', 'Crow', 'Bird', 'Frog', 'Cat', 
+        'Dog', 'Piano', 'Cymbal', 'Mallet_percussion', 'Drum', 'Trumpet', 'Guitar', 'Tambourine', 
+        'Gong', 'Brass_instrument', 'Percussion', 'Keyboard_(musical)', 
+        'Scratching_(performance_technique)', 'Harmonica', 'Plucked_string_instrument', 'Harp', 
+        'Raindrop', 'Rain', 'Ocean', 'Stream', 'Traffic_noise_and_roadway_noise', 'Motorcycle', 
+        'Truck', 'Computer_keyboard', 'Typewriter', 'Car', 'Bus', 'Skateboard', 'Train', 
+        'Ringtone', 'Bicycle', 'Drill', 'Sliding_door', 'Slam', 'Drawer_open_or_close', 
+        'Aircraft', 'Frying_(food)', 'Cupboard_open_or_close', 'Clock', 'Telephone', 'Shatter', 
+        'Writing', 'Zipper_(clothing)', 'Boiling', 'Typing', 'Ratchet_and_pawl', 'Power_tool', 
+        'Bathtub_(filling_or_washing)', 'Hammer', 'Boat_and_Water_vehicle', 'Chink_and_clink', 
+        'Siren', 'Microwave_oven', 'Idling', 'Door', 'Accelerating_and_revving_and_vroom', 
+        'Packing_tape_and_duct_tape', 'Fireworks', 'Motor_vehicle_(road)', 'Rail_transport', 
+        'Gunshot_and_gunfire', 'Scissors', 'Screech', 'Crumpling_and_crinkling', 'Tearing'
+    ], 
+    'dev_val': [
+        'Male_singing', 'Speech_synthesizer', 'Applause', 'Fart', 'Crowd', 'Crying_and_sobbing', 
+        'Cricket', 'Growling', 'Insect', 'Drum_kit', 'Rattle_(instrument)', 
+        'Wind_instrument_and_woodwind_instrument', 'Accordion', 'Waves_and_surf', 'Gurgling', 
+        'Trickle_and_dribble', 'Subway_and_metro_and_underground', 
+        'Fixed-wing_aircraft_and_airplane', 'Fill_(with_liquid)', 'Engine_starting', 
+        'Splash_and_splatter', 'Printer', 'Keys_jangling', 'Sink_(filling_or_washing)', 
+        'Mechanical_fan', 'Cutlery_and_silverware', 'Water_tap_and_faucet', 'Pour', 
+        'Dishes_and_pots_and_pans', 'Crushing'
+    ], 
+    'eval': [
+        'Female_singing', 'Screaming', 'Run', 'Chicken_and_rooster', 'Fowl', 'Organ', 
+        'Bowed_string_instrument', 'Thunder', 'Tick-tock', 'Sawing', 'Toilet_flush', 
+        'Coin_(dropping)', 'Boom', 'Camera', 'Drip'
+    ]
 }
 
 
@@ -93,12 +103,16 @@ class FSD_FS(NaiveDataset):
 
     def __getitem__(self, item: Tuple[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         r"""Returns tensor of audio and its label."""
-        y = ', '.join(self.meta[item])
-        x = os.path.join(self.clip_dir, f'{item}.wav')
+        x, y = item
+        x = os.path.join(self.clip_dir, f'{x}.wav')
         if self.cfgs['data_type'] == 'audio':
             x = torchaudio.load(x, normalize=True)
         if self.cfgs['target_type'] != 'category':
-            y = self.tokeniser[self.cfgs['target_type']]
+            _tmp = list()
+            _ys = y.split(', ') # note: we assume separator is ', ' by default
+            for _y in _ys:
+                _tmp = self.tokeniser[self.cfgs['target_type']](_y)
+            y = _tmp
         return x, y
 
     def _read_csv(self, csv_path: str) -> dict:
@@ -211,6 +225,7 @@ class MLFewShotSampler():
             n_supports: int = 5,
             n_queries: int = 5,
             n_task: int = 100,
+            seperator: str = ', ',
             **kargs
     ) -> None:
         self.dataset = dataset
@@ -219,6 +234,7 @@ class MLFewShotSampler():
         self.n_supports = n_supports
         self.n_queries = n_queries
         self.n_task = n_task
+        self.seperator = seperator
 
     def __len__(self):
         return self.n_task
@@ -251,23 +267,56 @@ class MLFewShotSampler():
                         _candidate.append(str(fpath))
                 _samples = np.random.choice(_candidate, size=self.n_queries, replace=False)
                 batch_x.extend(_samples.tolist())
-            yield batch_x
+            selected_classes = set(selected_classes)
+            # Mask Unselected categories in the labels
+            for x in batch_x:
+                y = set(self.dataset.meta[x])
+                y = list(y & selected_classes)
+                batch_y.append(self.seperator.join(y))
+            yield zip(batch_x, batch_y)
 
 if __name__ == '__main__':
     clip_dir = '/data/EECS-MachineListeningLab/datasets/FSD_FS/clips'
     audio_dir = '/data/EECS-MachineListeningLab/datasets/FSD_FS'
     csv_dir = '/data/EECS-MachineListeningLab/datasets/FSD_FS/meta'
-    modes = ['base', 'val', 'eval']
+    modes = ['dev_base', 'dev_val', 'eval']
     val = modes[1]
 
-    fsdfs = FSD_FS(clip_dir=clip_dir, audio_dir=audio_dir, csv_dir=csv_dir, mode=val, data_type='path', target_type='category')
+    fsdfs = FSD_FS(clip_dir=clip_dir, audio_dir=audio_dir, csv_path=csv_dir, mode=val, data_type='path', target_type='category')
     tokeniser = fsdfs.tokeniser()
     detokeniser = dict()
     for cat, token in tokeniser.items():
         detokeniser[token['mid']] = cat
-    selected_list = [detokeniser[mid] for mid in fsd50k_select_ids[val]]
-    sampler = MLFewShotSampler(dataset=fsdfs, labelset=selected_list, n_class=15, n_supports=1, n_queries=5, n_task=100)
+    # selected_list = [detokeniser[mid] for mid in fsd50k_select_ids[val]]
+    sampler = MLFewShotSampler(dataset=fsdfs, labelset=fsd50k_splits[val], n_class=15, n_supports=1, n_queries=5, n_task=100)
     dataloader = DataLoader(fsdfs, batch_sampler=sampler, num_workers=4, pin_memory=True)
-    for x, y in dataloader:
-        print(f"x={x}\n")
-        print(f"target={y}\n")
+    # for x, y in dataloader:
+    #     print(f"x={x}\n")
+    #     print(f"target={y}\n")
+    fsd50k_splits_newids = dict()
+    for sname, scats in fsd50k_splits.items():
+        _tmp = [tokeniser[cat]['id'] for cat in scats]
+        fsd50k_splits_newids[sname] = _tmp
+    
+    # for sname, scats in fsd50k_splits.items():
+    #     assert len(scats) == len(fsd50k_select_ids[sname])
+
+    print(fsd50k_splits_newids)
+
+    fsd50k_select_ids = {
+        'dev_base': [37, 33, 75, 198, 84, 85, 43, 111, 107, 148, 186, 77, 30, 44, 31, 21, 29, 39, 190, 157, 150, 22, 149, 158,
+                131, 91, 116, 15, 7, 50, 14, 82, 28, 59, 126, 57, 112, 67, 181, 90, 166, 88, 20, 125, 104, 144, 96, 127,
+                97, 135, 134, 122, 162, 177, 119, 180, 42, 182, 26, 23, 153, 178, 140, 12, 65, 155, 154, 64, 3, 83, 55,
+                40, 169, 147, 197, 199, 17, 183, 136, 129, 10, 94, 16, 35, 152, 117, 102, 62, 0, 124, 79, 118, 133, 92, 143,
+                146, 52, 168],
+        'dev_val': [110, 159, 6, 73, 51, 54, 49, 89, 103, 68, 138, 195, 1, 189, 93, 179, 164, 80, 76, 71, 160, 130,
+                    105, 151, 114, 56, 188, 128, 58, 53],
+        'eval': [74, 145, 141, 32, 81, 123, 19, 171, 174, 142, 175, 41, 18, 25, 66]
+    }
+    
+    for sname, sids in fsd50k_select_ids.items():
+        assert len(sids) == len(fsd50k_splits_newids[sname])
+        print(f"{sname}: {set(sids) == set(fsd50k_splits_newids[sname])}")
+    # false
+
+    

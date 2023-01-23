@@ -1,0 +1,6 @@
+- database=fsdkaggle18k
+- fewshot.n_class=10
+- fewshot.n_supports=0
+- fewshot.n_queries=50
+- fewshot.fine_tune=False
+- fewshot.a=0.0
