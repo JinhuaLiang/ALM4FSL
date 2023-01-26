@@ -189,7 +189,7 @@ class FSDKaggle18KFullsizeEvalution():
 def main(cfgs: OmegaConf) -> None:
     print(f"The seetings for the experiment of {cfgs}.")
     # I/O
-    db_name = cfgs['database']
+    db_name = 'fsdkaggle18k'
     weights_pth = cfgs['model_weights_path']
 
     audio_dir = cfgs[db_name]['audio_dir']
