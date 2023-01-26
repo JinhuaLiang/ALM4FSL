@@ -50,9 +50,9 @@ class FSDKaggle18K(NaiveDataset):
         r"""Returns tensor of audio and its label."""
         if isinstance(item, tuple):
             x, y = item
-        elif isinstance(item, int)
+        elif isinstance(item, int):
             x = self.indices[item]
-            y = self.meta[]
+            y = self.meta[x]
         if self.cfgs['data_type'] == 'audio':
             x = self._load_audio(x, sr=self.cfgs.sr)
         if self.cfgs['target_type'] == 'id':

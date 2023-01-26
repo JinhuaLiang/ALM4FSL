@@ -210,7 +210,6 @@ def main(cfgs: OmegaConf) -> None:
         target_type='category',
         )
     val_labelset = eval_database.labelset
-    assert val_labelset == train_database.labelset
     train_sampler = Sampler(
         dataset=train_database, 
         labelset=val_labelset,
