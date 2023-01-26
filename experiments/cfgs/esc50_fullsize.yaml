@@ -1,19 +1,18 @@
 # EXPERIMENT SETTING INTERFACE
 storage_pth: path/to/storage/space  # it is recommended to change this variable via bash script
 database: esc50
-experiment: ml_fewshot
 model_weights_path: ${storage_pth}/jinhua/ALM4FSL/ckpts/CLAP_weights_2022.pth
 
 # [Optaional] DETAILED EXPERIMENT SETTINGS
 fewshot:
   # ALGORITHM
-  adapter: match
+  adapter: xattention
 
   # FEWSHOT SETTING
-  n_task: 100
-  n_class: 15
+  n_task: 1
+  n_class: 50
   n_supports: 1
-  n_queries: 30
+  n_queries: 8
 
   # TRAINING SETTING
   fine_tune: false
@@ -40,13 +39,6 @@ fsdkaggle18k:
     '${storage_pth}/datasets/FSDKaggle2018/FSDKaggle2018.meta/train_post_competition.csv', 
     '${storage_pth}/datasets/FSDKaggle2018/FSDKaggle2018.meta/test_post_competition_scoring_clips.csv'
   ]
-
-fsd_fs:
-  clip_dir: ${storage_pth}/datasets/FSD_FS/clips/eval
-  audio_dir: ${storage_pth}/datasets/FSD_FS
-  csv_path: ${storage_pth}/datasets/FSD_FS/meta
-  mode: eval # ['dev_base', 'dev_val', 'eval']
-
 
 hydra:
   mode: MULTIRUN

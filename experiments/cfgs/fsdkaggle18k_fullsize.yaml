@@ -1,21 +1,21 @@
 # EXPERIMENT SETTING INTERFACE
 storage_pth: path/to/storage/space  # it is recommended to change this variable via bash script
-database: esc50
-experiment: ml_fewshot
+database: fsdkaggle18k
 model_weights_path: ${storage_pth}/jinhua/ALM4FSL/ckpts/CLAP_weights_2022.pth
 
 # [Optaional] DETAILED EXPERIMENT SETTINGS
 fewshot:
   # ALGORITHM
-  adapter: match
+  adapter: xattention
 
   # FEWSHOT SETTING
-  n_task: 100
-  n_class: 15
+  n_task: 1
+  n_class: 41
   n_supports: 1
-  n_queries: 30
+  n_queries: 8
 
   # TRAINING SETTING
+  batch_size: 128
   fine_tune: false
   train_epochs: 15
   learning_rate: 0.0001
@@ -27,26 +27,15 @@ fewshot:
     disturb: false
 
 # DATABASE SETTINGS
-esc50:
-  audio_dir: ${storage_pth}/datasets/ESC-50/audio
-  csv_path: ${storage_pth}/datasets/ESC-50/meta/esc50.csv
-
 fsdkaggle18k:
   audio_dir: [
     '${storage_pth}/datasets/FSDKaggle2018/FSDKaggle2018.audio_train',
-    '/data/EECS-MachineListeningLab/datasets/FSDKaggle2018/FSDKaggle2018.audio_test'
+    '${storage_pth}/datasets/FSDKaggle2018/FSDKaggle2018.audio_test'
   ]
   csv_path: [
     '${storage_pth}/datasets/FSDKaggle2018/FSDKaggle2018.meta/train_post_competition.csv', 
     '${storage_pth}/datasets/FSDKaggle2018/FSDKaggle2018.meta/test_post_competition_scoring_clips.csv'
   ]
-
-fsd_fs:
-  clip_dir: ${storage_pth}/datasets/FSD_FS/clips/eval
-  audio_dir: ${storage_pth}/datasets/FSD_FS
-  csv_path: ${storage_pth}/datasets/FSD_FS/meta
-  mode: eval # ['dev_base', 'dev_val', 'eval']
-
 
 hydra:
   mode: MULTIRUN

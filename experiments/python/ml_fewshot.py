@@ -41,7 +41,6 @@ class MultiLabelFewShot():
         train_lr: float = 1e-4,
     ) -> None:
         self.dataloader = dataloader
-        self.weights_pth = weights_pth
         self.prompt = prompt
         self.fewshot_cfgs = {
             'n_class': n_class,
@@ -51,9 +50,13 @@ class MultiLabelFewShot():
         self.a = a
         self.b = b
         self.distance_fn = CustomDistance(type=distance)
-        self.cuda = cuda
         self.tgt_tokeniser = tgt_tokeniser
         self.tgt_fmt = ', '
+
+        self.clap_model = CLAPWrapper(weights_pth, use_cuda=cuda)
+        # if torch.cuda.device_count() > 1:  # todo: use multi-gpu
+        #     print(f"Now use {torch.cuda.device_count()} GPUs.")
+        #     self.clap_model.clap = torch.nn.parallel.DistributedDataParallel(self.clap_model.clap)
 
         self.fine_tune = fine_tune
         if self.fine_tune:
@@ -63,9 +66,9 @@ class MultiLabelFewShot():
             }
             self.adapter_type = adapter_type
             self.xatt_disturb = xatt_disturb
+
         
     def forward(self, verbose: bool = False):
-        clap_model = CLAPWrapper(self.weights_pth, use_cuda=self.cuda)
         map, roc = list(), list()
         # for xs, ys in tqdm(self.dataloader):
         for xs, ys in self.dataloader:
@@ -74,9 +77,9 @@ class MultiLabelFewShot():
                 _tmp_ys.append(y.split(self.tgt_fmt))
             ys = _tmp_ys
             if self.fine_tune: 
-                _map, _roc = self._adapt_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
+                _map, _roc = self._adapt_on_batch(model=self.clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
             else:
-                _map, _roc = self._test_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
+                _map, _roc = self._test_on_batch(model=self.clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
             map.append(_map)
             roc.append(_roc)
             if verbose:
@@ -114,6 +117,9 @@ class MultiLabelFewShot():
             else:
                 init_w = torch.eye(embed_dim)
             adapter.weight = torch.nn.Parameter(init_w.to(audio_embeddings.device))
+        
+        # if torch.cuda.device_count() > 1:  # todo: use multiple gpus
+        #     adapter = torch.nn.parallel.DistributedDataParallel(adapter)
 
         optimiser = torch.optim.AdamW(adapter.parameters(), lr=train_lr, eps=1e-4)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, train_epochs)
@@ -190,19 +196,19 @@ class MultiLabelFewShot():
 
 @hydra.main(version_base=None, config_path='../cfgs', config_name='experiments_cfgs')
 def main(cfgs: OmegaConf) -> None:
+    # Get device infomation automatically and config multi-node if possible
     print(f"The seetings for the experiment of {cfgs}.")
     # I/O
     db_name = cfgs['database']
     exp_type = cfgs['experiment']
     weights_pth = cfgs['model_weights_path']
-
     audio_dir = cfgs[db_name]['audio_dir']
     csv_path = cfgs[db_name]['csv_path']
     
     DataSet, Sampler, fs_label_splits = prepare_data(data_source=db_name)
     mode = cfgs[db_name]['mode']
-    # mode = f"dev_{mode}" if mode != 'eval' else mode # todo: del dev
     val_labelset = fs_label_splits[mode]
+    
     database = DataSet(
         audio_dir=audio_dir, 
         csv_path=csv_path, 
@@ -220,7 +226,7 @@ def main(cfgs: OmegaConf) -> None:
         n_class=cfgs['fewshot']['n_class'],
         n_supports=cfgs['fewshot']['n_supports'],
         n_queries=cfgs['fewshot']['n_queries'],
-        n_task=100
+        n_task=cfgs['fewshot']['n_task']
         )
     dataloader = DataLoader(database, batch_sampler=sampler, num_workers=4, pin_memory=True)
     prompt = 'this is a sound of '
