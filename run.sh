@@ -1,12 +1,12 @@
 #!/bin/bash
-#$ -l gpu=1
+#£#$ -l gpu=1
 #$ -pe smp 8
 #$ -l h_vmem=11G
 #$ -l h_rt=100:0:0
 #$ -wd /data/home/eey340/WORKPLACE/ALM4FSL/experiments/python
 #$ -j y
 #$ -N ALM4FSL
-#$ -o /data/home/eey340/WORKPLACE/ALM4FSL/experiments/LOGS/fsdfs_xatt_sweep.log
+#$ -o /data/home/eey340/WORKPLACE/ALM4FSL/experiments/LOGS/esc_fullsize_sweep_match_newlr.log
 #$ -m beas
 ###£#$ -l cluster=andrena
 
@@ -14,7 +14,7 @@
 # Import environments
 module load cudnn/8.1.1-cuda11
 source ../../alm/bin/activate
-gpu-usage
+# gpu-usage
 
 
 STORAGE_DIR=/data/EECS-MachineListeningLab/ # `dataset dir` and `pretrained weight pth` should be under this dir
@@ -53,14 +53,16 @@ STORAGE_DIR=/data/EECS-MachineListeningLab/ # `dataset dir` and `pretrained weig
 
 ### fullsize experiment
 EXPERIMENT=esc50_fullsize_evaluation  # [esc50_fullsize_evaluation, fsdkaggle18k_fullsize_evaluation]
-N_SUPPORTS=1,3,5,10,15,20
-FINE_TUNE=False
-N_EPOCHS=10,15,20,25,30,35,40,45,50
-ADAPTER=xattention # match
+N_SUPPORTS=1,3,5,10,15,20,25,32
+FINE_TUNE=True
+N_EPOCHS=10,15,20,25,30,35,40,45,50,60,70,80,100
+ADAPTER=match # match, xattention
+LEARNING_RATE=0.001
 
 python3 ${EXPERIMENT}.py \
 storage_pth=${STORAGE_DIR} \
 fewshot.fine_tune=True \
 fewshot.adapter=${ADAPTER} \
 fewshot.n_supports=${N_SUPPORTS} \
-fewshot.train_epochs=${N_EPOCHS}
+fewshot.train_epochs=${N_EPOCHS} \
+fewshot.learning_rate=${LEARNING_RATE}
