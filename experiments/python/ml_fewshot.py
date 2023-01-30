@@ -66,6 +66,10 @@ class MultiLabelFewShot():
             }
             self.adapter_type = adapter_type
             self.xatt_disturb = xatt_disturb
+        
+        if self.fewshot_cfgs['n_supports'] == 0 and self.fine_tune:
+            print(r"Warning: cannot train the model when `n_supports` = 0")
+        print(r"now we do a zero-shot classification.")
 
         
     def forward(self, verbose: bool = False):
@@ -76,10 +80,13 @@ class MultiLabelFewShot():
             for y in ys:
                 _tmp_ys.append(y.split(self.tgt_fmt))
             ys = _tmp_ys
-            if self.fine_tune: 
-                _map, _roc = self._adapt_on_batch(model=self.clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
+            if self.fewshot_cfgs['n_supports'] == 0:
+                _map, _roc = self._zero_shot_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
             else:
-                _map, _roc = self._test_on_batch(model=self.clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
+                if self.fine_tune: 
+                    _map, _roc = self._adapt_on_batch(model=self.clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
+                else:
+                    _map, _roc = self._test_on_batch(model=self.clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
             map.append(_map)
             roc.append(_roc)
             if verbose:
@@ -191,7 +198,27 @@ class MultiLabelFewShot():
             :math: `A = \exp(-\beta d_{cos}(f(q_x), f(s_x)))`
         """
         attention = torch.exp(- b * self.distance_fn(q_x, s_x))
-        return torch.mm(attention, s_y) 
+        return torch.mm(attention, s_y)
+    
+    @torch.no_grad()
+    def _zero_shot_on_batch(self, model: torch.nn.Module, wav_paths: list, targets: list, n_class: int, n_supports: int, n_queries: int, a: float, b: float) -> Tensor:
+        r"""Predict query logits using support embeddings and targets."""
+        # Generate a list of selected labels and corresponding captions
+        labelset = list()
+        for t in targets:
+            labelset.extend(t)
+        labelset = list(set(labelset))
+        caps = [self.prompt + l for l in labelset]
+        # CLAP forward
+        query_embeddings = model.get_audio_embeddings(wav_paths, resample=False)
+        query_targets = self.tgt_tokeniser(target=targets, labelset=labelset).to(device=query_embeddings.device).detach().cpu().numpy()
+        # Predict labels with similarity between audio and text embeddings
+        text_embeddings = model.get_text_embeddings(caps)
+        preds = model.compute_similarity(query_embeddings, text_embeddings).sigmoid().detach().cpu().numpy()  # size = (n_wav, n_class)
+        # Compare predictions with query targets
+        map = metrics.average_precision_score(query_targets, preds, average='macro')
+        roc = metrics.roc_auc_score(query_targets, preds, average='macro')
+        return map, roc
 
 
 @hydra.main(version_base=None, config_path='../cfgs', config_name='experiments_cfgs')

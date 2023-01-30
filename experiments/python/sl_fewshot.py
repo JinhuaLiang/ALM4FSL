@@ -19,29 +19,6 @@ from utils import CustomDistance, confidence_interval, normc2d, tgt_tokenise_fn
 torch.manual_seed(42)
 
 
-def zero_shot(
-    database: torch.nn.Module, 
-    prompt: str
-    ) -> float:
-    labelset = database.labelset
-    wav_pths, tgts = list(), list()
-    for x, y in database:
-        wav_pths.append(x)
-        tgts.append(y)
-    caps = [prompt + l for l in labelset]
-    preds = compute_similarity(weights_pth, caps, wav_pths)
-    # Compare predictions with targets
-    preds = preds.argmax(dim=1).tolist()
-    assert len(preds) == len(tgts)
-    correct_cnt = 0
-    for idx, p in tqdm(enumerate(preds)):
-        if labelset[p] == tgts[idx]:
-            correct_cnt += 1
-    acc = correct_cnt / len(preds)
-    # print(f"Accuracy: {acc}")
-    return acc
-
-
 class SingleLabelFewShot():
     def __init__(
         self, 
@@ -85,15 +62,22 @@ class SingleLabelFewShot():
             self.adapter_type = adapter_type
             self.xatt_disturb = xatt_disturb
         
+        if self.fewshot_cfgs['n_supports'] == 0 and self.fine_tune:
+            print(r"Warning: cannot train the model when `n_supports` = 0")
+        print(r"now we do a zero-shot classification.")
+        
     def forward(self, verbose: bool = False):
         clap_model = CLAPWrapper(self.weights_pth, use_cuda=self.cuda)
         acc = list()
         # for xs, ys in tqdm(self.dataloader):
         for xs, ys in self.dataloader:
-            if self.fine_tune: 
-                _running_acc = self._adapt_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
+            if self.fewshot_cfgs['n_supports'] == 0:
+                _running_acc = self._zero_shot_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
             else:
-                _running_acc = self._test_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
+                if self.fine_tune: 
+                    _running_acc = self._adapt_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
+                else:
+                    _running_acc = self._test_on_batch(model=clap_model, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
             acc.append(_running_acc)
             if verbose:
                 print(f"Running accuracy: {_running_acc}")
@@ -192,6 +176,25 @@ class SingleLabelFewShot():
         correct_cnt = 0
         for idx, p in enumerate(preds):
             if labelset[p] == query_targets[idx]:
+                correct_cnt += 1
+        _running_acc = correct_cnt / len(preds)
+        return _running_acc
+    
+    @torch.no_grad()
+    def _zero_shot_on_batch(self, model: torch.nn.Module, wav_paths: list, targets: list, n_class: int, n_supports: int, n_queries: int, a: float, b: float) -> Tensor:
+        # Generate a list of selected labels and corresponding captions
+        labelset = list(set(targets))
+        caps = [self.prompt + l for l in labelset]
+        # CLIP forward
+        query_embeddings = model.get_audio_embeddings(wav_paths, resample=False)
+        # Predict labels with similarity between audio and text embeddings
+        text_embeddings = model.get_text_embeddings(caps)
+        preds = model.compute_similarity(query_embeddings, text_embeddings).softmax(dim=-1) # size = (n_wav, n_class)
+        # Compare predictions with query targets
+        preds = preds.argmax(dim=1).tolist()
+        correct_cnt = 0
+        for idx, p in enumerate(preds):
+            if labelset[p] == targets[idx]:
                 correct_cnt += 1
         _running_acc = correct_cnt / len(preds)
         return _running_acc

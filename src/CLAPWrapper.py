@@ -16,12 +16,17 @@ import torch
 from importlib_resources import files
 
 
+removed_weights = [
+    'audio_encoder.base.fc_audioset.weight', 'audio_encoder.base.fc_audioset.bias', 
+    ] # 'audio_encoder.projection.linear1.weight', 'audio_encoder.projection.linear2.weight', 
+    # 'audio_encoder.projection.layer_norm.weight', 'audio_encoder.projection.layer_norm.bias'
+    
 class CLAPWrapper():
     """
     A class for interfacing CLAP model.  
     """
 
-    def __init__(self, model_fp, use_cuda=False):
+    def __init__(self, model_fp, n_class=None, train=False, use_cuda=False):
         self.np_str_obj_array_pattern = re.compile(r'[SaUO]')
         self.file_path = os.path.realpath(__file__)
         self.default_collate_err_msg_format = (
@@ -29,6 +34,8 @@ class CLAPWrapper():
             "dicts or lists; found {}")
         self.config_as_str = files('src.configs').joinpath('config.yml').read_text()
         self.model_fp = model_fp
+        self.n_class = n_class
+        self.train = train
         self.use_cuda = use_cuda
         self.clap, self.tokenizer, self.args = self.load_clap()
 
@@ -42,6 +49,10 @@ class CLAPWrapper():
         else:
             self.token_keys = ['input_ids', 'attention_mask']
 
+        if not self.n_class:
+            self.n_class = args.num_classes
+        print(f"The number of classes = {self.n_class}.")
+
         clap = CLAP(
             audioenc_name=args.audioenc_name,
             sample_rate=args.sampling_rate,
@@ -50,18 +61,25 @@ class CLAPWrapper():
             mel_bins=args.mel_bins,
             fmin=args.fmin,
             fmax=args.fmax,
-            classes_num=args.num_classes,
+            classes_num=self.n_class,
             out_emb=args.out_emb,
             text_model=args.text_model,
             transformer_embed_dim=args.transformer_embed_dim,
             d_proj=args.d_proj
         )
-
-        # Load pretrained weights for model
+        
+         # Load pretrained weights for model
         model_state_dict = torch.load(self.model_fp, map_location=torch.device('cpu'))['model']
-        clap.load_state_dict(model_state_dict)
+        if self.n_class != args.num_classes:
+            for w in removed_weights:
+                del model_state_dict[w]
+                print(f"Pop out {w} weights.")
+        
+        clap.load_state_dict(model_state_dict, strict=False)
 
-        clap.eval()  # set clap in eval mode
+        if not self.train:
+            clap.eval()  # set clap in eval mode
+            print(r"CLAP model is set to the eval mode.")
         tokenizer = AutoTokenizer.from_pretrained(args.text_model)
 
         if self.use_cuda and torch.cuda.is_available():

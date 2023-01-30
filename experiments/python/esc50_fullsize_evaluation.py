@@ -67,17 +67,23 @@ class ESC50FullsizeEvalution():
     def forward(self, verbose: bool = False):
         clap_model = CLAPWrapper(self.weights_pth, use_cuda=self.cuda)
         classwise_res, history = dict(), dict()
-        for lbl in self.eval_dataloader.dataset.labelset:  # record results as per class
-            history[lbl] = list()
-        for xs, ys in self.train_dataloader:
+        if self.fewshot_cfgs['n_supports'] == 0:
             if self.fine_tune:
-                _cls_acc = self._adapt_on_batch(model=clap_model, eval_dataloader=self.eval_dataloader, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
-            else:
-                _cls_acc = self._test_on_batch(model=clap_model, eval_dataloader=self.eval_dataloader, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
-            if verbose:
-                print(f"Running class-wise accuracy: {_cls_acc}")
-            for cat, v in _cls_acc.items():
-                history[cat].append(v)
+                print(r"Warning: cannot train the model when `n_supports` = 0")
+            print(r"now we do a zero-shot classification.")
+            history = self._zero_shot_classification(model=clap_model, eval_dataloader=self.eval_dataloader, a=self.a, b=self.b, **self.fewshot_cfgs)
+        else:
+            for lbl in self.eval_dataloader.dataset.labelset:  # record results as per class
+                history[lbl] = list()
+            for xs, ys in self.train_dataloader:
+                if self.fine_tune:
+                    _cls_acc = self._adapt_on_batch(model=clap_model, eval_dataloader=self.eval_dataloader, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs, **self.tr_cfgs)
+                else:
+                    _cls_acc = self._test_on_batch(model=clap_model, eval_dataloader=self.eval_dataloader, wav_paths=xs, targets=ys, a=self.a, b=self.b, **self.fewshot_cfgs)
+                if verbose:
+                    print(f"Running class-wise accuracy: {_cls_acc}")
+                for cat, v in _cls_acc.items():
+                    history[cat].append(v)
         for cat, cnt in history.items():
             classwise_res[cat] = (torch.tensor(cnt, dtype=torch.float).mean() / 8).detach().numpy()  # each label have 8 examples in one fold
         return classwise_res, history
@@ -151,7 +157,7 @@ class ESC50FullsizeEvalution():
             if labelset[p] == q_tgts[idx]:
                 history[labelset[p]] += 1
         return history
-
+    
     @torch.no_grad()
     def _test_on_batch(self, model: torch.nn.Module, eval_dataloader: torch.nn.Module, wav_paths: list, targets: list, n_class: int, n_supports: int, n_queries: int, a: float, b: float) -> Tensor:
         r"""Predict query logits using support embeddings and targets."""
@@ -174,7 +180,6 @@ class ESC50FullsizeEvalution():
                 if labelset[p] == q_tgts[idx]:
                     history[labelset[p]] += 1
         return history
-
     
     def _affinity_predict(self, q_x: Tensor, s_x: Tensor, s_y: Tensor, b: float) -> Tensor:
         r"""Predict query labels using affinity matrix between query and supports as:
@@ -183,11 +188,30 @@ class ESC50FullsizeEvalution():
         """
         attention = torch.exp(- b * self.distance_fn(q_x, s_x))
         return torch.mm(attention, s_y) 
+    
+    @torch.no_grad()
+    def _zero_shot_classification(self, model: torch.nn.Module, eval_dataloader: torch.nn.Module, n_class: int, n_supports: int, n_queries: int, a: float, b: float) -> Tensor:
+        r"""Predict query logits using support embeddings and targets."""
+        # Generate a list of selected labels and corresponding captions
+        labelset = eval_dataloader.dataset.labelset
+        caps = [self.prompt + l for l in labelset]
+        # CLIP forward
+        text_embeddings = model.get_text_embeddings(caps)
+        history = dict(zip(labelset, [0 for _ in labelset]))  # dict: label -> count
+        for q_pths, q_tgts in eval_dataloader:
+            query_embeddings = model.get_audio_embeddings(q_pths, resample=False)
+            # Predict labels with similarity between audio and text embeddings
+            preds = model.compute_similarity(query_embeddings, text_embeddings)
+            preds = preds.argmax(dim=1).tolist()
+            for idx, p in enumerate(preds):
+                if labelset[p] == q_tgts[idx]:
+                    history[labelset[p]] += 1
+        return history
 
 
 @hydra.main(version_base=None, config_path='../cfgs', config_name='esc50_fullsize')
 def main(cfgs: OmegaConf) -> None:
-    print(f"The seetings for the experiment of {cfgs}.")
+    print(f"The settings for the experiment of {cfgs}.")
     # I/O
     db_name = 'esc50'
     weights_pth = cfgs['model_weights_path']

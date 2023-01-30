@@ -11,11 +11,12 @@ fewshot:
   # FEWSHOT SETTING
   n_task: 1
   n_class: 50
-  n_supports: 1
+  n_supports: 32  # `n_sample` per class in the finetune algorithm
   n_queries: 8
 
   # TRAINING SETTING
   fine_tune: false
+  batch_size: 20
   train_epochs: 15
   learning_rate: 0.0001
 

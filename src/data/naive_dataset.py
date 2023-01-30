@@ -13,6 +13,39 @@ class NaiveDataset():
         wav = wav.squeeze() if mono == True else wav
         return wav
 
+class BalancedSampler():
+    r"""A balanced sampler for fully-supervised learning. \n
+        This is a batch sample where `n_batch` = `n_sample` * len(`labelset`) / `batch_size`
+    Args:
+        dataset: data source, e.g. instance of torch.data.Dataset, data[item] = {filename: labels}.
+        labelset: a list of novel classes.
+        n_sample: number of samples per class.
+    """
+    def __init__(self, dataset: torch.nn.Module, labelset: list, n_sample: int, batch_size: int) -> None:
+        assert (n_sample * len(labelset)) % batch_size == 0
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.n_batch = n_sample * len(labelset) // self.batch_size
+        # Create a data subset whose label is in `labelset`
+        self.subset, _tmp = list(), dict(zip(labelset, [[] for _ in labelset]))
+        for fpath, lbl in self.dataset.meta.items():
+            if lbl in labelset:
+                _tmp[lbl].append(fpath)
+        for lbl, f in _tmp.items():
+            files = np.stack(f)
+            files = np.random.choice(files, size=n_sample, replace=False).tolist()
+            self.subset.extend(files)
+        np.random.shuffle(self.subset)
+
+    def __len__(self):
+        return self.n_batch
+
+    def __iter__(self):
+        r"""Returns a list of format: (`file_path`, `target_id`)."""
+        for idx in range(self.n_batch):
+            batch_x = self.subset[idx * self.batch_size : (idx + 1) * self.batch_size]
+            batch_y = [self.dataset.meta[x] for x in batch_x]
+            yield zip(batch_x, batch_y)
 
 class SimpleFewShotSampler():
     r"""A simple few-shot sampler.
